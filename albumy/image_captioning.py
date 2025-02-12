@@ -1,6 +1,8 @@
 from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
 import torch
 from PIL import Image
+from transformers.utils import logging
+logging.set_verbosity_error()
 
 # Load the model, feature extractor, and tokenizer
 model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
