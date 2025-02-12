@@ -6,7 +6,7 @@
     :license: MIT, see LICENSE for more details.
 """
 from functools import wraps
-
+from markupsafe import Markup
 from flask import Markup, flash, url_for, redirect, abort
 from flask_login import current_user
 
