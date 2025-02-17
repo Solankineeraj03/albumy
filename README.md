@@ -42,3 +42,10 @@ Test account:
 
 This project is licensed under the MIT License (see the
 [LICENSE](LICENSE) file for details).
+
+
+## Running the ML Models for Automatic Image captioning and classification
+There are no changes or imports that are required to be done.
+You can simply run the project and the models will be downloaded automatically.
+
+Steps are same as above. Create a virtual environment and install requirements then run the application.
