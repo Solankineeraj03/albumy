@@ -19,8 +19,8 @@ from albumy.models import User, Photo, Tag, Follow, Collect, Comment, Notificati
 from albumy.notifications import push_comment_notification, push_collect_notification
 from albumy.utils import rename_image, resize_image, redirect_back, flash_errors
 
-from albumy.image_captioning import predict_caption
-from albumy.image_prediction import classify_image_beit
+from albumy.tagFinding import classify_local_image
+from albumy.salesforce_image_caption import generate_image_captions
 main_bp = Blueprint('main', __name__)
 
 
@@ -114,60 +114,6 @@ def get_image(filename):
 @main_bp.route('/avatars/<path:filename>')
 def get_avatar(filename):
     return send_from_directory(current_app.config['AVATARS_SAVE_PATH'], filename)
-
-
-@main_bp.route('/upload', methods=['GET', 'POST'])
-@login_required
-@confirm_required
-@permission_required('UPLOAD')
-def upload():
-    if request.method == 'POST' and 'file' in request.files:
-        f = request.files.get('file')
-        randomInteger = random.randint(0, 1000)
-        filename = f"imgName{randomInteger}.jpg"
-        f.save(os.path.join(current_app.config['ALBUMY_UPLOAD_PATH'], filename))
-        image_path = f"uploads/{filename}"
-        predicted_caption = predict_caption([image_path])
-        predicted_classes = classify_image_beit(filename)
-        print(f"virat:{predicted_classes}")
-        print(f"xCaptain:{predicted_caption}")
-          # Adjust the range as needed
-        filename_s = f"imgName{randomInteger}.jpg"
-        filename_m = f"imgName{randomInteger}.jpg"
-        print(f"small image:{filename_s},large image:{filename_m}")
-        photo = Photo(
-            filename=filename,
-            filename_s=filename_s,
-            filename_m=filename_m,
-            author=current_user._get_current_object(),
-            description=predicted_caption[0].strip("[]'")
-        )
-        db.session.add(photo)
-        db.session.commit()
-        photo_id = photo.id
-        print(f"Photo added to DB with ID: {photo_id}")
-        add_tags_to_photo(photo_id, predicted_classes)
-    return render_template('main/upload.html')
-
-def add_tags_to_photo(photo_id, predicted_classes):
-    tags_to_add = predicted_classes.split(',')
-    for tag_name in tags_to_add:
-        form = TagForm(tag=tag_name)
-        if form.validate():
-            photo = Photo.query.get_or_404(photo_id)
-            if current_user != photo.author and not current_user.can('MODERATE'):
-                abort(403)
-
-            tag = Tag.query.filter_by(name=tag_name).first()
-            if tag is None:
-                tag = Tag(name=tag_name)
-                db.session.add(tag)
-                db.session.commit()
-            if tag not in photo.tags:
-                photo.tags.append(tag)
-                db.session.commit()
-        else:
-            flash_errors(form)
 
 @main_bp.route('/photo/<int:photo_id>')
 def show_photo(photo_id):
@@ -432,3 +378,57 @@ def delete_tag(photo_id, tag_id):
 
     flash('Tag deleted.', 'info')
     return redirect(url_for('.show_photo', photo_id=photo_id))
+
+
+@main_bp.route('/upload', methods=['GET', 'POST'])
+@login_required
+@confirm_required
+@permission_required('UPLOAD')
+def upload():
+    if request.method == 'POST' and 'file' in request.files:
+        f = request.files.get('file')
+        randomInteger = random.randint(0, 1000)
+        filename = f"imgName{randomInteger}.jpg"
+        f.save(os.path.join(current_app.config['ALBUMY_UPLOAD_PATH'], filename))
+        image_path = f"uploads/{filename}"
+        generated_caption = generate_image_captions(image_path)
+        generated_labels = classify_local_image(image_path)
+        print(f"generated_caption:{generated_caption}")
+        print(f"generated_labels:{generated_labels}")
+          # Adjust the range as needed
+        filename_s = f"randomNameOfImage{randomInteger}.jpg"
+        filename_m = f"randomNameOfImage{randomInteger}.jpg"
+        photo = Photo(
+            filename=filename,
+            filename_s=filename_s,
+            filename_m=filename_m,
+            author=current_user._get_current_object(),
+            description=generated_caption[0].strip("[]'")
+        )
+        db.session.add(photo)
+        db.session.commit()
+        image_id = photo.id
+        assign_labels_to_image(image_id, generated_labels)
+    return render_template('main/upload.html')
+
+def assign_labels_to_image(image_id, detected_labels):
+    labels_list = detected_labels.split(',')
+    for label in labels_list:
+        label_form = TagForm(tag=label)
+        if label_form.validate():
+            image = Photo.query.get_or_404(image_id)
+            if current_user != image.author and not current_user.can('MODERATE'):
+                abort(403)
+
+            existing_label = Tag.query.filter_by(name=label).first()
+            if not existing_label:
+                existing_label = Tag(name=label)
+                db.session.add(existing_label)
+                db.session.commit()
+
+            if existing_label not in image.tags:
+                image.tags.append(existing_label)
+                db.session.commit()
+        else:
+            flash_errors(label_form)
+
